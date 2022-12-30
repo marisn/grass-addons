@@ -470,8 +470,8 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
             size = atof(db_get_string(&valstr));
           } else
             size = lattr->size;
-          /* 0.7 is random value chosen by trial and error */
-          D_text_size(size * 0.7, size * 0.7);
+          /* 0.51 is random value chosen by trial and error */
+          D_text_size(size * 0.51, size * 0.51);
           if (lattr->font_col) {
             column = db_get_table_column(table, 2);
             db_convert_column_value_to_string(column, &valstr);
@@ -506,8 +506,8 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
       double xarr[5], yarr[5];
       double T, B, L, R;
 
-      X = X + D_get_d_to_u_xconv() * 0.5 * size * 0.7;
-      Y = Y + D_get_d_to_u_yconv() * 1.5 * size * 0.7;
+      X = X + D_get_d_to_u_xconv() * 0.5 * size * 0.51;
+      Y = Y + D_get_d_to_u_yconv() * 1.5 * size * 0.51;
 
       D_pos_abs(X, Y);
       D_get_text_box(db_get_string(&text), &T, &B, &L, &R);
