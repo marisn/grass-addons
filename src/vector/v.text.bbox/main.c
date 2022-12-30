@@ -64,7 +64,6 @@ int main(int argc, char *argv[]) {
   struct bound_box vbbox;
   int chcat = 0, ret;
   int level;
-  int pxsize;
 
   G_gisinit(argv[0]);
   module = G_define_module();
@@ -106,7 +105,7 @@ int main(int argc, char *argv[]) {
   opt_font->guisection = _("Font settings");
 
   opt_font_size = G_define_option();
-  opt_font_size->key = "fontsize";
+  opt_font_size->key = "size";
   opt_font_size->type = TYPE_INTEGER;
   opt_font_size->required = NO;
   opt_font_size->answer = "100";
@@ -159,6 +158,8 @@ int main(int argc, char *argv[]) {
   opt_yref->description = _("Label vertical justification");
   opt_yref->guisection = _("Position");
 
+  G_option_required(opt_font, opt_font_col, NULL);
+
   if (G_parser(argc, argv))
     exit(EXIT_FAILURE);
 
@@ -186,9 +187,6 @@ int main(int argc, char *argv[]) {
   window.top = vbbox.T;
   window.bottom = vbbox.B;
   G_set_window(&window);
-  pxsize = abs(ceil(window.north - window.south));
-  if (pxsize < 100)
-    pxsize = 100;
 
   chcat = 0;
   if (opt_where->answer) {
@@ -227,18 +225,18 @@ int main(int argc, char *argv[]) {
   char buff[512];
   sprintf(buff, "GRASS_RENDER_IMMEDIATE=cairo");
   putenv(G_store(buff));
-  sprintf(buff, "GRASS_RENDER_WIDTH=%d", pxsize);
+  sprintf(buff, "GRASS_RENDER_WIDTH=1000");
   putenv(G_store(buff));
-  sprintf(buff, "GRASS_RENDER_HEIGHT=%d", pxsize);
+  sprintf(buff, "GRASS_RENDER_HEIGHT=1000");
   putenv(G_store(buff));
 
   D_open_driver();
   D_setup(0);
   D_set_reduction(1.0);
+
   display_attr(&Map, opt_text_col->answer, Clist, &lattr, chcat);
 
   D_close_driver();
-
   Vect_close(&Map);
   Vect_destroy_cat_list(Clist);
 }
@@ -343,13 +341,13 @@ void options_to_lattr(LATTR *lattr, const char *layer, int size, double padding,
 
 int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
                  LATTR *lattr, int chcat) {
-  int i, ltype, more;
+  int i, ltype, more, ret;
   double X, Y;
-  double size;
+  double size, dsize;
   char font[2000];
   struct line_pnts *in_Points, *out_Points;
   struct line_cats *in_Cats, *out_Cats;
-  int cat;
+  int cat, new_cat = 1;
   char buf[2000], buf2[2000], buf3[2000];
   struct field_info *fi;
   dbDriver *driver;
@@ -357,6 +355,7 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
   dbCursor cursor;
   dbTable *table;
   dbColumn *column;
+  struct bound_box vbbox;
 
   G_debug(2, "attr()");
 
@@ -386,15 +385,23 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
   out_Points = Vect_new_line_struct();
   out_Cats = Vect_new_cats_struct();
   Vect_rewind(Map);
-  while (1) {
-    ltype = Vect_read_next_line(Map, in_Points, in_Cats);
+  for (int line = 1; line <= Map->plus.n_lines; line++) {
+    ltype = Vect_read_line(Map, in_Points, in_Cats, line);
     if (ltype == -1)
       G_fatal_error(_("Unable to read vector map"));
     else if (ltype == -2) /* EOF */
       break;
 
-    if (!(ltype & GV_POINT || ltype & GV_LINE || ltype & GV_CENTROID))
+    if (!(ltype & GV_POINT || ltype & GV_LINE || ltype & GV_CENTROID)) {
       continue;
+    }
+
+    ret = Vect_get_line_box(Map, line, &vbbox);
+    if (ret == 0) {
+      continue;
+    }
+    D_set_src(vbbox.S + 1000, vbbox.S, vbbox.W, vbbox.W + 1000);
+    D_update_conversions();
 
     if (chcat) {
       int found = 0;
@@ -470,8 +477,8 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
             size = atof(db_get_string(&valstr));
           } else
             size = lattr->size;
-          /* 0.51 is random value chosen by trial and error */
-          D_text_size(size * 0.51, size * 0.51);
+          dsize = fabs(size * D_get_u_to_d_yconv());
+          D_text_size(dsize, dsize);
           if (lattr->font_col) {
             column = db_get_table_column(table, 2);
             db_convert_column_value_to_string(column, &valstr);
@@ -506,17 +513,15 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
       double xarr[5], yarr[5];
       double T, B, L, R;
 
-      X = X + D_get_d_to_u_xconv() * 0.5 * size * 0.51;
-      Y = Y + D_get_d_to_u_yconv() * 1.5 * size * 0.51;
+      X = X - D_get_d_to_u_xconv() * 0.15 * dsize;
+      Y = Y + D_get_d_to_u_yconv() * 1. * dsize;
 
       D_pos_abs(X, Y);
       D_get_text_box(db_get_string(&text), &T, &B, &L, &R);
-
-      /* Expand border 1/2 of text size */
-      T = T - D_get_d_to_u_yconv() + lattr->padding;
-      B = B + D_get_d_to_u_yconv() - lattr->padding;
-      L = L - D_get_d_to_u_xconv() - lattr->padding;
-      R = R + D_get_d_to_u_xconv() + lattr->padding;
+      T = T + lattr->padding;
+      B = B - lattr->padding;
+      L = L - lattr->padding;
+      R = R + lattr->padding;
 
       Xoffset = 0;
       Yoffset = 0;
@@ -540,7 +545,7 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
       Vect_reset_cats(out_Cats);
       Vect_append_point(out_Points, xarr[0] + (xarr[2] - xarr[0]) / 2,
                         yarr[0] + (yarr[2] - yarr[0]) / 2, 0.0);
-      Vect_cat_set(out_Cats, 1, cat);
+      Vect_cat_set(out_Cats, 1, new_cat);
       Vect_write_line(&lattr->Out, GV_CENTROID, out_Points, out_Cats);
 
       if (lattr->size_col)
@@ -553,7 +558,7 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
         sprintf(buf3, "");
 
       sprintf(buf, "insert into %s values ( %d, '%s' %s%s )", lattr->Fi->table,
-              cat, db_get_string(&text), buf2, buf3);
+              new_cat, db_get_string(&text), buf2, buf3);
       if (db_set_string(&sql, buf) != DB_OK)
         G_fatal_error(_("Unable to fill attribute table"));
 
@@ -562,6 +567,7 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
         G_fatal_error(_("Unable to insert new record: %s"),
                       db_get_string(&sql));
       }
+      new_cat++;
     }
   }
 
