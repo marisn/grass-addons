@@ -509,12 +509,20 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
         Y = in_Points->y[i];
       }
 
-      int Xoffset, Yoffset;
+      int Xoffset;
       double xarr[5], yarr[5];
       double T, B, L, R;
+      double ysize;
 
-      X = X - D_get_d_to_u_xconv() * 0.15 * dsize;
-      Y = Y + D_get_d_to_u_yconv() * 1. * dsize;
+      ysize = D_get_d_to_u_yconv() * dsize;
+      if (lattr->yref == LBOTTOM)
+        Y = Y + ysize * 0.7;
+      else if (lattr->yref == LCENTER)
+        Y = Y + ysize * 0.25;
+      else
+        Y = Y - ysize * 0.1;
+
+      X = X - D_get_d_to_u_xconv() * 0.1 * dsize;
 
       D_pos_abs(X, Y);
       D_get_text_box(db_get_string(&text), &T, &B, &L, &R);
@@ -524,27 +532,25 @@ int display_attr(struct Map_info *Map, char *attrcol, struct cat_list *Clist,
       R = R + lattr->padding;
 
       Xoffset = 0;
-      Yoffset = 0;
       if (lattr->xref == LCENTER)
         Xoffset = -(R - L) / 2;
       if (lattr->xref == LRIGHT)
         Xoffset = -(R - L);
-      if (lattr->yref == LCENTER)
-        Yoffset = -(B - T) / 2;
-      if (lattr->yref == LBOTTOM)
-        Yoffset = -(B - T);
 
       xarr[0] = xarr[1] = xarr[4] = L + Xoffset;
       xarr[2] = xarr[3] = R + Xoffset;
-      yarr[0] = yarr[3] = yarr[4] = B + Yoffset;
-      yarr[1] = yarr[2] = T + Yoffset;
+      yarr[0] = yarr[3] = yarr[4] = B;
+      yarr[1] = yarr[2] = T;
 
       Vect_copy_xyz_to_pnts(out_Points, xarr, yarr, 0, 5);
       Vect_write_line(&lattr->Out, GV_BOUNDARY, out_Points, out_Cats);
       Vect_reset_line(out_Points);
       Vect_reset_cats(out_Cats);
+      /* Generally this is a wrong approach for centroids as if polygons
+       * are overlapping as centroid might fall into another area */
+      // Labels with vertical align=center are displayed a bit up.
       Vect_append_point(out_Points, xarr[0] + (xarr[2] - xarr[0]) / 2,
-                        yarr[0] + (yarr[2] - yarr[0]) / 2, 0.0);
+                        yarr[0] + (yarr[2] - yarr[0]) / 2.4, 0.0);
       Vect_cat_set(out_Cats, 1, new_cat);
       Vect_write_line(&lattr->Out, GV_CENTROID, out_Points, out_Cats);
 
