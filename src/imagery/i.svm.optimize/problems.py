@@ -8,11 +8,11 @@ from grass.script.core import tempname
 
 
 class SVMProblem(ElementwiseProblem):
-    def __init__(self, config, q, **kwargs):
+    def __init__(self, conf, q, **kwargs):
         super().__init__(
-            n_var=config["n_var"], n_obj=1, xl=config["xl"], xu=config["xu"], **kwargs
+            n_var=conf["n_var"], n_obj=1, xl=conf["xl"], xu=conf["xu"], **kwargs
         )
-        self.config = config
+        self.conf = conf
         self.q = q
 
     def _evaluate(self, x, out, *args, **kwargs):
@@ -20,12 +20,25 @@ class SVMProblem(ElementwiseProblem):
         try:
             grass.run_command(
                 "i.svm.train",
-                group=self.config["group_t"],
-                subgroup=self.config["subgroup_t"],
-                trainingmap=self.config["training"],
-                signaturefile=self.config["signature"] + postfix,
-                cost=x[0],
-                gamma=x[1],
+                group=self.conf["group_t"],
+                subgroup=self.conf["subgroup_t"],
+                trainingmap=self.conf["training"],
+                signaturefile=self.conf["signature"] + postfix,
+                cost=(
+                    x[self.conf["variables"]["cost"]["index"]]
+                    if self.conf["variables"]["cost"]["in_use"]
+                    else self.conf["variables"]["cost"]["value"]
+                ),
+                gamma=(
+                    x[self.conf["variables"]["gamma"]["index"]]
+                    if self.conf["variables"]["gamma"]["in_use"]
+                    else self.conf["variables"]["gamma"]["value"]
+                ),
+                degree=(
+                    x[self.conf["variables"]["degree"]["index"]]
+                    if self.conf["variables"]["degree"]["in_use"]
+                    else self.conf["variables"]["degree"]["value"]
+                ),
                 overwrite=True,
                 quiet=True,
             )
@@ -74,4 +87,3 @@ class SVMProblem(ElementwiseProblem):
             )
         except CalledModuleError:
             print("err removing raster")
-
